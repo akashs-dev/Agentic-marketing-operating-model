@@ -798,19 +798,43 @@ export default function App() {
 
   const visibleNodes = useMemo(() => {
     let nodes = [];
-    switch (viewMode) {
-      case 'strategy': nodes = localNodes.filter(n => n.lane === 'strategy'); break;
-      case 'creative': nodes = localNodes.filter(n => n.lane === 'design'); break;
-      case 'ops': nodes = localNodes.filter(n => n.lane === 'ops'); break;
-      case 'combined-legacy': nodes = localNodes; break;
-      case 'combined-agentic': nodes = localNodes; break;
-      default: nodes = []; break;
+    
+    // Determine which nodes to show based on viewMode and isLegacy toggle
+    if (viewMode === 'combined-agentic' || viewMode === 'combined-legacy') {
+      // In combined views, respect the isLegacy toggle to switch between modes
+      nodes = localNodes.filter(n => isLegacy ? n.isLegacy : n.isAgentic);
+    } else {
+      // In individual views, filter by lane and mode
+      switch (viewMode) {
+        case 'strategy': 
+          nodes = localNodes.filter(n => {
+            if (n.lane !== 'strategy') return false;
+            if (isLegacy) return n.isLegacy;
+            return n.isAgentic;
+          }); 
+          break;
+        case 'creative': 
+          nodes = localNodes.filter(n => {
+            if (n.lane !== 'design') return false;
+            if (isLegacy) return n.isLegacy;
+            return n.isAgentic;
+          }); 
+          break;
+        case 'ops': 
+          nodes = localNodes.filter(n => {
+            if (n.lane !== 'ops') return false;
+            if (isLegacy) return n.isLegacy;
+            return n.isAgentic;
+          }); 
+          break;
+        default: nodes = []; break;
+      }
     }
 
     if (nodes.length === 0) return [];
 
-    const minX = Math.min(...localNodes.map(n => nodePositions[n.id]?.x ?? n.x));
-    const minY = Math.min(...localNodes.map(n => nodePositions[n.id]?.y ?? n.y));
+    const minX = Math.min(...nodes.map(n => nodePositions[n.id]?.x ?? n.x));
+    const minY = Math.min(...nodes.map(n => nodePositions[n.id]?.y ?? n.y));
 
     const offsetX = minX - 50;
     const offsetY = minY - 50;
@@ -822,7 +846,7 @@ export default function App() {
       originalX: nodePositions[n.id]?.x ?? n.x,
       originalY: nodePositions[n.id]?.y ?? n.y
     }));
-  }, [viewMode, nodePositions]);
+  }, [viewMode, nodePositions, isLegacy, localNodes]);
 
   const visibleConnections = useMemo(() => {
     const nodeIds = new Set(visibleNodes.map(n => n.id));

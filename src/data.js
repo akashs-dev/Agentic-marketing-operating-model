@@ -1,7 +1,8 @@
 import { Users, Target, Zap, BarChart2, Briefcase, Settings, Palette, Server, FileText, LayoutTemplate, Database } from 'lucide-react';
 
 export const NODES = [
-  // Column 1
+  // ==================== AGENTIC WORKFLOW NODES ====================
+  // Column 1 - Business Owner (Both modes)
   {
     id: 'business_owner',
     title: 'Business Owner (PL)',
@@ -12,9 +13,11 @@ export const NODES = [
     x: 50,
     y: 50,
     lane: 'strategy',
+    isAgentic: true,
+    isLegacy: true,
     dependsOn: []
   },
-  // Column 2
+  // Column 2 - Brief (Both modes)
   {
     id: 'use_case_brief',
     title: 'Outcome: Detailed Brief',
@@ -25,9 +28,11 @@ export const NODES = [
     x: 480,
     y: 50,
     lane: 'strategy',
+    isAgentic: true,
+    isLegacy: true,
     dependsOn: ['business_owner']
   },
-  // Column 3
+  // Column 3 - MCP Orchestrator (Agentic only)
   {
     id: 'mcp_initial',
     title: 'MCP Orchestrator',
@@ -38,9 +43,11 @@ export const NODES = [
     x: 910,
     y: 50,
     lane: 'strategy',
+    isAgentic: true,
+    isLegacy: false,
     dependsOn: ['use_case_brief']
   },
-  // Column 4 (Parallel Agents)
+  // Column 4 - Parallel Agents (Agentic only)
   {
     id: 'seg_agent',
     title: 'Seg Agent',
@@ -51,6 +58,8 @@ export const NODES = [
     x: 1340,
     y: -100,
     lane: 'strategy',
+    isAgentic: true,
+    isLegacy: false,
     dependsOn: ['mcp_initial']
   },
   {
@@ -63,6 +72,8 @@ export const NODES = [
     x: 1340,
     y: 100,
     lane: 'strategy',
+    isAgentic: true,
+    isLegacy: false,
     dependsOn: ['mcp_initial']
   },
   {
@@ -75,9 +86,11 @@ export const NODES = [
     x: 1340,
     y: 300,
     lane: 'strategy',
+    isAgentic: true,
+    isLegacy: false,
     dependsOn: ['mcp_initial']
   },
-  // Column 5 (Main Leads)
+  // Column 5 - Main Strategy Leads (Both modes, but different dependencies)
   {
     id: 'audience_lead',
     title: 'Audience Strategy Lead',
@@ -88,7 +101,24 @@ export const NODES = [
     x: 1770,
     y: 100,
     lane: 'strategy',
+    isAgentic: true,
+    isLegacy: true,
     dependsOn: ['seg_agent', 'an_agent', 'camp_agent']
+  },
+  // Legacy-only connection: Direct from brief to audience lead
+  {
+    id: 'audience_lead_legacy',
+    title: 'Audience Strategy Lead',
+    adobeTool: 'RTCDP / CJA',
+    icon: Users,
+    agentPush: 'Manual analysis of customer data for audience segmentation.',
+    humanAction: 'Manually reviews customer data and builds segmentation logic.',
+    x: 1770,
+    y: 100,
+    lane: 'strategy',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['use_case_brief']
   },
   {
     id: 'creative_lead',
@@ -100,7 +130,24 @@ export const NODES = [
     x: 1770,
     y: 400,
     lane: 'strategy',
+    isAgentic: true,
+    isLegacy: true,
     dependsOn: ['audience_lead']
+  },
+  // Legacy-only: Direct creative lead
+  {
+    id: 'creative_lead_legacy',
+    title: 'Creative Strategy Lead',
+    adobeTool: 'GENSTUDIO / CJA',
+    icon: Target,
+    agentPush: 'Manual creative strategy development.',
+    humanAction: 'Develops creative strategy and brand narrative manually.',
+    x: 1770,
+    y: 400,
+    lane: 'strategy',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['audience_lead_legacy']
   },
   {
     id: 'campaign_lead',
@@ -112,9 +159,56 @@ export const NODES = [
     x: 1770,
     y: 700,
     lane: 'strategy',
+    isAgentic: true,
+    isLegacy: true,
     dependsOn: ['creative_lead']
   },
-  // Right Side Operations
+  // Legacy-only: Direct campaign lead
+  {
+    id: 'campaign_lead_legacy',
+    title: 'Campaign Strategy Lead',
+    adobeTool: 'ADOBE CAMPAIGN',
+    icon: Zap,
+    agentPush: 'Manual journey mapping and cadence planning.',
+    humanAction: 'Manually builds out campaign journey and defines frequency rules.',
+    x: 1770,
+    y: 700,
+    lane: 'strategy',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['creative_lead_legacy']
+  },
+  // Personalization Lead (Both modes)
+  {
+    id: 'personalization_lead',
+    title: 'Personalization Strategy Lead',
+    adobeTool: 'ADOBE TARGET',
+    icon: Target,
+    agentPush: 'Personalisation Agent recommends A/B test ideas and targeting rules.',
+    humanAction: 'Approves personalization experiments and test setup.',
+    x: 2150,
+    y: 100,
+    lane: 'strategy',
+    isAgentic: true,
+    isLegacy: true,
+    dependsOn: ['audience_lead']
+  },
+  // Legacy personalization
+  {
+    id: 'personalization_lead_legacy',
+    title: 'Personalization Strategy Lead',
+    adobeTool: 'ADOBE TARGET',
+    icon: Target,
+    agentPush: 'Manual A/B test planning and rule definition.',
+    humanAction: 'Manually designs personalization rules and tests.',
+    x: 2150,
+    y: 100,
+    lane: 'strategy',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['audience_lead_legacy']
+  },
+  // Right Side Operations - Agentic
   {
     id: 'mcp_rtcdp',
     title: 'MCP',
@@ -125,11 +219,13 @@ export const NODES = [
     x: 2200,
     y: 100,
     lane: 'ops',
+    isAgentic: true,
+    isLegacy: false,
     dependsOn: ['audience_lead']
   },
   {
     id: 'cdp_ops',
-    title: 'CDP Audience Operator',
+    title: 'CDP Operations',
     adobeTool: 'ADOBE RTCDP',
     icon: Settings,
     agentPush: 'Drafts segments S1, S2, S3, S4 autonomously in Adobe RTCDP via MCP.',
@@ -137,8 +233,26 @@ export const NODES = [
     x: 2630,
     y: 100,
     lane: 'ops',
+    isAgentic: true,
+    isLegacy: true,
     dependsOn: ['mcp_rtcdp']
   },
+  // Legacy CDP Ops (Direct from audience lead)
+  {
+    id: 'cdp_ops_legacy',
+    title: 'CDP Operations',
+    adobeTool: 'ADOBE RTCDP',
+    icon: Settings,
+    agentPush: 'Manual segment creation and validation in RTCDP.',
+    humanAction: 'Manually builds and validates segments in RTCDP.',
+    x: 2630,
+    y: 100,
+    lane: 'ops',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['audience_lead_legacy']
+  },
+  // Creative/Design - Agentic
   {
     id: 'mcp_creative',
     title: 'MCP',
@@ -149,6 +263,8 @@ export const NODES = [
     x: 2200,
     y: 400,
     lane: 'design',
+    isAgentic: true,
+    isLegacy: false,
     dependsOn: ['creative_lead']
   },
   {
@@ -161,7 +277,24 @@ export const NODES = [
     x: 2630,
     y: 400,
     lane: 'design',
+    isAgentic: true,
+    isLegacy: true,
     dependsOn: ['mcp_creative']
+  },
+  // Legacy Creative Designer
+  {
+    id: 'creative_designer_legacy',
+    title: 'Creative Designer',
+    adobeTool: 'AEM / DAM',
+    icon: Palette,
+    agentPush: 'Manual creative asset creation and management.',
+    humanAction: 'Manually creates and uploads creative assets to AEM and DAM.',
+    x: 2630,
+    y: 400,
+    lane: 'design',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['creative_lead_legacy']
   },
   {
     id: 'aem_tool',
@@ -173,7 +306,24 @@ export const NODES = [
     x: 3060,
     y: 250,
     lane: 'design',
+    isAgentic: true,
+    isLegacy: true,
     dependsOn: ['creative_designer']
+  },
+  // Legacy AEM
+  {
+    id: 'aem_tool_legacy',
+    title: 'AEM (Templates)',
+    adobeTool: 'ADOBE AEM',
+    icon: LayoutTemplate,
+    agentPush: 'Manual template storage and management.',
+    humanAction: 'Manually builds and stores email/page templates.',
+    x: 3060,
+    y: 250,
+    lane: 'design',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['creative_designer_legacy']
   },
   {
     id: 'dam_tool',
@@ -185,8 +335,26 @@ export const NODES = [
     x: 3060,
     y: 550,
     lane: 'design',
+    isAgentic: true,
+    isLegacy: true,
     dependsOn: ['creative_designer']
   },
+  // Legacy DAM
+  {
+    id: 'dam_tool_legacy',
+    title: 'DAM (Assets)',
+    adobeTool: 'ADOBE DAM',
+    icon: Database,
+    agentPush: 'Manual asset library management.',
+    humanAction: 'Manually organizes and uploads digital assets.',
+    x: 3060,
+    y: 550,
+    lane: 'design',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['creative_designer_legacy']
+  },
+  // Campaign Operations - Agentic
   {
     id: 'campaign_ops',
     title: 'Campaign Operations',
@@ -197,11 +365,89 @@ export const NODES = [
     x: 2200,
     y: 700,
     lane: 'ops',
+    isAgentic: true,
+    isLegacy: true,
     dependsOn: ['campaign_lead']
+  },
+  // Legacy Campaign Operations
+  {
+    id: 'campaign_ops_legacy',
+    title: 'Campaign Operations',
+    adobeTool: 'ADOBE CAMPAIGN',
+    icon: Settings,
+    agentPush: 'Manual workflow configuration and deployment.',
+    humanAction: 'Manually builds campaign workflows, tests, and deploys.',
+    x: 2200,
+    y: 700,
+    lane: 'ops',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['campaign_lead_legacy']
+  },
+  // Target Operations - Agentic
+  {
+    id: 'target_ops',
+    title: 'Target Operations',
+    adobeTool: 'ADOBE TARGET',
+    icon: Settings,
+    agentPush: 'Automatically activates personalization rules and A/B tests.',
+    humanAction: 'Validates setup and manually triggers test activation.',
+    x: 2630,
+    y: 700,
+    lane: 'ops',
+    isAgentic: true,
+    isLegacy: true,
+    dependsOn: ['personalization_lead']
+  },
+  // Legacy Target Operations
+  {
+    id: 'target_ops_legacy',
+    title: 'Target Operations',
+    adobeTool: 'ADOBE TARGET',
+    icon: Settings,
+    agentPush: 'Manual personalization rule setup.',
+    humanAction: 'Manually configures and deploys personalization rules.',
+    x: 2630,
+    y: 700,
+    lane: 'ops',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['personalization_lead_legacy']
+  },
+  // Analytics Practitioners
+  {
+    id: 'analytics_practitioners',
+    title: 'Analytics Practitioners',
+    adobeTool: 'ADOBE ANALYTICS',
+    icon: BarChart2,
+    agentPush: 'Validates insights and performs deep-dive analysis.',
+    humanAction: 'Validates insights and performs analysis.',
+    x: 3060,
+    y: 850,
+    lane: 'ops',
+    isAgentic: true,
+    isLegacy: true,
+    dependsOn: ['campaign_ops', 'target_ops']
+  },
+  // Legacy Analytics Practitioners
+  {
+    id: 'analytics_practitioners_legacy',
+    title: 'Analytics Practitioners',
+    adobeTool: 'ADOBE ANALYTICS',
+    icon: BarChart2,
+    agentPush: 'Manual analytics and reporting.',
+    humanAction: 'Manually collects, analyzes, and reports on campaign performance.',
+    x: 3060,
+    y: 850,
+    lane: 'ops',
+    isAgentic: false,
+    isLegacy: true,
+    dependsOn: ['campaign_ops_legacy', 'target_ops_legacy']
   }
 ];
 
 export const CONNECTIONS = [
+  // ==================== AGENTIC MODE CONNECTIONS ====================
   { source: 'business_owner', target: 'use_case_brief' },
   { source: 'use_case_brief', target: 'mcp_initial' },
   { source: 'mcp_initial', target: 'seg_agent' },
@@ -213,12 +459,32 @@ export const CONNECTIONS = [
   { source: 'audience_lead', target: 'mcp_rtcdp' },
   { source: 'mcp_rtcdp', target: 'cdp_ops' },
   { source: 'audience_lead', target: 'creative_lead' },
+  { source: 'audience_lead', target: 'personalization_lead' },
   { source: 'creative_lead', target: 'mcp_creative' },
   { source: 'mcp_creative', target: 'creative_designer' },
   { source: 'creative_designer', target: 'aem_tool' },
   { source: 'creative_designer', target: 'dam_tool' },
   { source: 'creative_lead', target: 'campaign_lead' },
-  { source: 'campaign_lead', target: 'campaign_ops' }
+  { source: 'campaign_lead', target: 'campaign_ops' },
+  { source: 'personalization_lead', target: 'target_ops' },
+  { source: 'campaign_ops', target: 'analytics_practitioners' },
+  { source: 'target_ops', target: 'analytics_practitioners' },
+  
+  // ==================== LEGACY MODE CONNECTIONS ====================
+  { source: 'business_owner', target: 'use_case_brief' },
+  { source: 'use_case_brief', target: 'audience_lead_legacy' },
+  { source: 'audience_lead_legacy', target: 'creative_lead_legacy' },
+  { source: 'audience_lead_legacy', target: 'personalization_lead_legacy' },
+  { source: 'audience_lead_legacy', target: 'cdp_ops_legacy' },
+  { source: 'creative_lead_legacy', target: 'campaign_lead_legacy' },
+  { source: 'creative_lead_legacy', target: 'creative_designer_legacy' },
+  { source: 'creative_designer_legacy', target: 'aem_tool_legacy' },
+  { source: 'creative_designer_legacy', target: 'dam_tool_legacy' },
+  { source: 'campaign_lead_legacy', target: 'campaign_ops_legacy' },
+  { source: 'personalization_lead_legacy', target: 'target_ops_legacy' },
+  { source: 'campaign_ops_legacy', target: 'analytics_practitioners_legacy' },
+  { source: 'target_ops_legacy', target: 'analytics_practitioners_legacy' },
+  { source: 'cdp_ops_legacy', target: 'analytics_practitioners_legacy' }
 ];
 
 export const AGENTS = [
