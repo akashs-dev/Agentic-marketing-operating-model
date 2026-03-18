@@ -102,7 +102,7 @@ export const NODES = [
     y: 100,
     lane: 'strategy',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['seg_agent', 'an_agent', 'camp_agent']
   },
   // Legacy-only connection: Direct from brief to audience lead
@@ -131,7 +131,7 @@ export const NODES = [
     y: 400,
     lane: 'strategy',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['audience_lead']
   },
   // Legacy-only: Direct creative lead
@@ -160,7 +160,7 @@ export const NODES = [
     y: 700,
     lane: 'strategy',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['creative_lead']
   },
   // Legacy-only: Direct campaign lead
@@ -178,7 +178,7 @@ export const NODES = [
     isLegacy: true,
     dependsOn: ['creative_lead_legacy']
   },
-  // Personalization Lead (Both modes)
+  // Personalization Lead (Agentic only)
   {
     id: 'personalization_lead',
     title: 'Personalization Strategy Lead',
@@ -190,7 +190,7 @@ export const NODES = [
     y: 100,
     lane: 'strategy',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['audience_lead']
   },
   // Right Side Operations - Agentic
@@ -219,7 +219,7 @@ export const NODES = [
     y: 100,
     lane: 'ops',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['mcp_rtcdp']
   },
   // Legacy CDP Ops (Direct from audience lead)
@@ -263,7 +263,7 @@ export const NODES = [
     y: 400,
     lane: 'design',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['mcp_creative']
   },
   // Legacy Creative Designer
@@ -292,7 +292,7 @@ export const NODES = [
     y: 250,
     lane: 'design',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['creative_designer']
   },
   // Legacy AEM
@@ -321,7 +321,7 @@ export const NODES = [
     y: 550,
     lane: 'design',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['creative_designer']
   },
   // Legacy DAM
@@ -351,7 +351,7 @@ export const NODES = [
     y: 700,
     lane: 'ops',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['campaign_lead']
   },
   // Legacy Campaign Operations
@@ -381,7 +381,7 @@ export const NODES = [
     y: 700,
     lane: 'ops',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['personalization_lead']
   },
   // Legacy Target Operations
@@ -399,7 +399,7 @@ export const NODES = [
     isLegacy: true,
     dependsOn: ['audience_lead_legacy']
   },
-  // Analytics Practitioners
+  // Analytics Practitioners - Agentic
   {
     id: 'analytics_practitioners',
     title: 'Analytics Practitioners',
@@ -411,7 +411,7 @@ export const NODES = [
     y: 850,
     lane: 'ops',
     isAgentic: true,
-    isLegacy: true,
+    isLegacy: false,
     dependsOn: ['campaign_ops', 'target_ops']
   },
   // Legacy Analytics Practitioners
