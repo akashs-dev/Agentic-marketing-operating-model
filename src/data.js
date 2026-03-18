@@ -193,21 +193,6 @@ export const NODES = [
     isLegacy: true,
     dependsOn: ['audience_lead']
   },
-  // Legacy personalization
-  {
-    id: 'personalization_lead_legacy',
-    title: 'Personalization Strategy Lead',
-    adobeTool: 'ADOBE TARGET',
-    icon: Target,
-    agentPush: 'Manual A/B test planning and rule definition.',
-    humanAction: 'Manually designs personalization rules and tests.',
-    x: 2150,
-    y: 100,
-    lane: 'strategy',
-    isAgentic: false,
-    isLegacy: true,
-    dependsOn: ['audience_lead_legacy']
-  },
   // Right Side Operations - Agentic
   {
     id: 'mcp_rtcdp',
@@ -412,7 +397,7 @@ export const NODES = [
     lane: 'ops',
     isAgentic: false,
     isLegacy: true,
-    dependsOn: ['personalization_lead_legacy']
+    dependsOn: ['audience_lead_legacy']
   },
   // Analytics Practitioners
   {
@@ -474,14 +459,13 @@ export const CONNECTIONS = [
   { source: 'business_owner', target: 'use_case_brief' },
   { source: 'use_case_brief', target: 'audience_lead_legacy' },
   { source: 'audience_lead_legacy', target: 'creative_lead_legacy' },
-  { source: 'audience_lead_legacy', target: 'personalization_lead_legacy' },
   { source: 'audience_lead_legacy', target: 'cdp_ops_legacy' },
+  { source: 'audience_lead_legacy', target: 'target_ops_legacy' },
   { source: 'creative_lead_legacy', target: 'campaign_lead_legacy' },
   { source: 'creative_lead_legacy', target: 'creative_designer_legacy' },
   { source: 'creative_designer_legacy', target: 'aem_tool_legacy' },
   { source: 'creative_designer_legacy', target: 'dam_tool_legacy' },
   { source: 'campaign_lead_legacy', target: 'campaign_ops_legacy' },
-  { source: 'personalization_lead_legacy', target: 'target_ops_legacy' },
   { source: 'campaign_ops_legacy', target: 'analytics_practitioners_legacy' },
   { source: 'target_ops_legacy', target: 'analytics_practitioners_legacy' },
   { source: 'cdp_ops_legacy', target: 'analytics_practitioners_legacy' }
