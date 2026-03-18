@@ -1,0 +1,1181 @@
+import React, { useState, useRef, useEffect, useMemo, useCallback } from 'react';
+import { FileText, Users, Palette, Zap, Target, BarChart2 as BarChart3, Bot, Mail, FileSpreadsheet, Calendar, RefreshCw, Lightbulb, Filter, Share2, Sparkles, LineChart, X, Database, LayoutTemplate, MessageSquare, Play, Lock, AlertCircle, BookOpen, Layers, ArrowRight, ZoomIn, ZoomOut, Briefcase, Settings, MoreVertical, Edit2, Save } from 'lucide-react';
+import { gsap } from 'gsap';
+import { NODES, CONNECTIONS, AGENTS } from './data';
+
+function getSmartPath(sourceNode, targetNode, isDrawing) {
+  const sX = sourceNode.x;
+  const sY = sourceNode.y;
+  const sW = 380;
+  const sH = 280;
+
+  const tX = targetNode.x;
+  const tY = targetNode.y;
+  const tW = isDrawing ? 0 : 380;
+
+  // Determine relative positions
+  const isVertical = !isDrawing && Math.abs(sX - tX) < 200 && (tY > sY + sH * 0.5);
+  const isBackward = !isDrawing && (tX + tW) < sX && !isVertical;
+
+  let startX, startY, endX, endY;
+
+  if (isVertical) {
+    startX = sX + sW / 2;
+    startY = sY + 280; // attach to bottom
+    endX = tX + tW / 2;
+    endY = tY;         // attach to top
+    const dy = endY - startY;
+    const cy = startY + Math.max(dy / 2, 40);
+    return { path: `M ${startX} ${startY} C ${startX} ${cy}, ${endX} ${cy}, ${endX} ${endY}`, startX, startY, endX, endY };
+  } else if (isBackward) {
+    startX = sX;       // left side
+    startY = sY + 140;
+    endX = tX + tW;    // right side
+    endY = tY + 140;
+    const dx = startX - endX;
+    const cx = startX - Math.max(dx / 2, 40);
+    return { path: `M ${startX} ${startY} C ${cx} ${startY}, ${cx} ${endY}, ${endX} ${endY}`, startX, startY, endX, endY };
+  } else {
+    // Normal left-to-right
+    startX = sX + sW;
+    startY = sY + 140;
+    endX = tX;
+    endY = isDrawing ? tY : tY + 140;
+    const dx = endX - startX;
+    const cx = startX + Math.max(dx / 2, 40);
+    return { path: `M ${startX} ${startY} C ${cx} ${startY}, ${cx} ${endY}, ${endX} ${endY}`, startX, startY, endX, endY };
+  }
+}
+
+const Connection = ({ sourceNode, targetNode, isLegacy, isRecentlyApproved, isDrawing, onClickConnection }) => {
+  const { path: pathData, startX, startY, endX, endY } = getSmartPath(sourceNode, targetNode, isDrawing);
+
+  const pathRef = useRef(null);
+  const pulseRef = useRef(null);
+  const [pathLength, setPathLength] = useState(0);
+
+  useEffect(() => {
+    if (pathRef.current) {
+      setPathLength(pathRef.current.getTotalLength());
+    }
+  }, [pathData]);
+
+  useEffect(() => {
+    if (!isLegacy && isRecentlyApproved && pathLength > 0 && pulseRef.current) {
+      gsap.fromTo(pulseRef.current,
+        { strokeDashoffset: pathLength, opacity: 1 },
+        { strokeDashoffset: 0, duration: 1.5, ease: "power1.inOut", opacity: 0 }
+      );
+    }
+  }, [isLegacy, isRecentlyApproved, pathLength]);
+
+  const midX = (startX + endX) / 2;
+  const midY = (startY + endY) / 2;
+  const icons = [<Mail size={16} />, <FileSpreadsheet size={16} />, <Calendar size={16} />];
+  const icon = icons[Math.floor((startX + endY) % 3)];
+
+  return (
+    <g
+      className={!isDrawing ? "cursor-pointer group pointer-events-auto" : "pointer-events-none"}
+      onClick={(e) => {
+        if (!isDrawing && onClickConnection) {
+          e.stopPropagation();
+          const rect = document.getElementById('interactive-canvas').getBoundingClientRect();
+          // Assuming App component's zoom context is passed or approximated
+          // We pass raw client coordinates to let the parent handle the overlay math
+          onClickConnection(e, sourceNode.id, targetNode.id);
+        }
+      }}
+    >
+      {!isDrawing && (
+        <path
+          d={pathData}
+          fill="none"
+          stroke="transparent"
+          strokeWidth="24"
+        />
+      )}
+      <path
+        ref={pathRef}
+        d={pathData}
+        fill="none"
+        stroke={isLegacy ? "#fca5a5" : "#cbd5e1"}
+        strokeWidth={isLegacy ? 2 : 3}
+        strokeDasharray={isLegacy ? "8,8" : "none"}
+        className={`transition-all duration-500 ${!isDrawing ? 'group-hover:stroke-red-500 group-hover:drop-shadow-md' : ''}`}
+      />
+      {!isLegacy && (
+        <path
+          ref={pulseRef}
+          d={pathData}
+          fill="none"
+          stroke="#6366f1"
+          strokeWidth="6"
+          strokeDasharray={`40 ${pathLength || 10000}`}
+          strokeLinecap="round"
+          style={{ filter: 'drop-shadow(0 0 8px #818cf8)', opacity: 0 }}
+        />
+      )}
+      {isLegacy && (
+        <foreignObject x={midX - 16} y={midY - 16} width="32" height="32">
+          <div className="w-8 h-8 bg-red-50 border border-red-200 rounded-full flex items-center justify-center text-red-400 shadow-sm">
+            {icon}
+          </div>
+        </foreignObject>
+      )}
+    </g>
+  );
+};
+
+const NodeCard = ({ node, isLegacy, isApproved, canApprove, onApprove, onNavigate, viewMode, onMouseDown, isDragging, onConnectionStart, onConnectionDrop, onEditNode, openDropdownId, setOpenDropdownId, isEditing }) => {
+  const Icon = node.icon;
+  const isBusinessOwner = node.id.startsWith('business_owner');
+  const isMcp = node.title.toLowerCase().includes('mcp') || node.adobeTool.toLowerCase().includes('mcp');
+  const isAdobeTool = node.adobeTool.includes('AEM') || node.adobeTool.includes('DAM') || node.adobeTool.includes('WORKFRONT');
+  const isAgent = node.id.includes('agent');
+
+  let borderColor = 'border-indigo-200/60';
+  let shadowColor = 'shadow-indigo-500/10';
+  let activeRingColor = 'ring-indigo-500';
+  let iconBgColor = 'bg-[#4f46e5]'; // solid indigo for normal nodes
+  let labelColor = 'text-indigo-600';
+
+  if (isLegacy) {
+    borderColor = 'border-gray-200';
+    shadowColor = 'shadow-gray-200/50';
+    activeRingColor = 'ring-gray-400';
+    iconBgColor = 'bg-gray-200 text-gray-600';
+    labelColor = 'text-indigo-600';
+  } else if (isMcp) {
+    borderColor = 'border-rose-200/60';
+    shadowColor = 'shadow-rose-500/10';
+    activeRingColor = 'ring-rose-500';
+    iconBgColor = 'bg-[#ffe4e6] text-rose-600'; // light red
+    labelColor = 'text-rose-600';
+  }
+  return (
+    <div
+      className={`absolute w-[380px] rounded-2xl border backdrop-blur-xl shadow-xl overflow-hidden no-pan group ${isLegacy
+        ? 'bg-white/95 border-gray-200 shadow-gray-200/50'
+        : `bg-white/80 ${borderColor} ${shadowColor}`
+        } ${isDragging ? `z-50 ring-2 ${activeRingColor} shadow-2xl scale-[1.02] cursor-grabbing` : isEditing ? `z-40 ring-4 ${activeRingColor} shadow-2xl scale-[1.02]` : 'z-10 transition-transform duration-300'}`}
+      style={{ left: node.x, top: node.y }}
+      onMouseUp={() => onConnectionDrop && onConnectionDrop(node.id)}
+    >
+      {/* Header */}
+      <div
+        className={`p-5 border-b flex items-center justify-between transition-colors duration-700 select-none ${isDragging ? 'cursor-grabbing' : 'cursor-grab'} ${isLegacy ? 'bg-gray-50/80' : 'bg-white'
+          }`}
+        onMouseDown={(e) => onMouseDown(e, node.id)}
+      >
+        <div className="flex items-center gap-4">
+          <div className={`p-2.5 rounded-xl transition-colors duration-700 ${isLegacy ? 'bg-gray-100 text-gray-500' : iconBgColor}`}>
+            <Icon size={22} className={isLegacy ? '' : iconBgColor.includes('text-') ? '' : 'text-white'} />
+          </div>
+          <div>
+            <h3 className="font-bold text-gray-900 text-lg leading-tight">{node.title}</h3>
+            <span className={`text-[10px] font-bold tracking-widest uppercase ${labelColor}`}>{node.adobeTool}</span>
+          </div>
+        </div>
+        {!isLegacy && (
+          <div className="relative">
+            <button
+              onClick={(e) => { e.stopPropagation(); setOpenDropdownId(openDropdownId === node.id ? null : node.id); }}
+              className="p-1.5 text-gray-400 hover:text-indigo-600 hover:bg-white rounded-lg transition-colors"
+            >
+              <MoreVertical size={20} />
+            </button>
+            {openDropdownId === node.id && (
+              <div className="absolute right-0 top-full mt-1 w-36 bg-white rounded-xl shadow-xl border border-gray-100 z-50 py-1 overflow-hidden" onClick={e => e.stopPropagation()}>
+                <button
+                  onClick={() => { setOpenDropdownId(null); onEditNode(node.id); }}
+                  className="w-full text-left px-4 py-2 text-sm font-semibold hover:bg-indigo-50 text-gray-700 hover:text-indigo-600 flex items-center gap-2"
+                >
+                  <Edit2 size={14} /> Edit Node
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Agent Co-pilot */}
+      {!isLegacy && (
+        <div className={`overflow-hidden transition-all duration-700 max-h-[200px] opacity-100`}>
+          <div className="p-5 bg-indigo-900/5 border-b border-indigo-100/50 relative">
+            <div className="absolute top-0 left-0 w-1.5 h-full bg-indigo-500 shadow-[0_0_12px_#6366f1]"></div>
+            <div className="flex gap-3">
+              <Bot className="text-indigo-600 shrink-0 mt-0.5" size={20} />
+              <div>
+                <p className="text-xs font-bold tracking-wider text-indigo-800 mb-1.5 uppercase">Agent Co-pilot</p>
+                <p className="text-sm text-gray-700 leading-relaxed">{node.agentPush}</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Human Action */}
+      <div className="p-5 bg-gray-50/90">
+        <div className="flex gap-3 mb-5">
+          <Users className="text-gray-500 shrink-0 mt-0.5" size={20} />
+          <div>
+            <p className="text-xs font-bold tracking-wider text-gray-500 mb-1.5 uppercase">Human Action</p>
+            <p className="text-sm text-gray-700 leading-relaxed">{node.humanAction}</p>
+          </div>
+        </div>
+
+        <button
+          onClick={() => onApprove(node.id)}
+          disabled={isApproved || !canApprove}
+          className={`w-full py-2.5 rounded-xl font-semibold transition-all duration-300 flex items-center justify-center gap-2 ${isApproved
+            ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+            : canApprove
+              ? 'bg-indigo-600 hover:bg-indigo-700 text-white shadow-md hover:shadow-indigo-500/20 hover:-translate-y-0.5'
+              : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
+        >
+          {isApproved ? 'Approved' : isBusinessOwner ? 'Approve Brief' : 'Approve & Push'}
+        </button>
+
+        {viewMode !== 'combined-legacy' && viewMode !== 'combined-agentic' && node.links && (
+          <div className="mt-4 pt-4 border-t border-gray-200 flex flex-col gap-2">
+            {node.links.map((link) => (
+              <button
+                key={link.targetView}
+                onClick={(e) => { e.stopPropagation(); onNavigate(link.targetView); }}
+                className="flex items-center justify-between w-full px-4 py-2.5 bg-white border border-indigo-100 text-indigo-700 rounded-xl text-sm font-bold hover:bg-indigo-50 hover:border-indigo-200 transition-all shadow-sm"
+              >
+                {link.label} <ArrowRight size={16} />
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Connection Handle (Right Center) */}
+      <div
+        className="absolute w-6 h-6 bg-indigo-500 rounded-full border-2 border-indigo-200 cursor-crosshair z-20 hidden group-hover:flex items-center justify-center shadow-lg hover:scale-110 transition-transform hover:bg-indigo-600 active:scale-95"
+        style={{ right: '-12px', top: '140px', transform: 'translateY(-50%)' }}
+        onMouseDown={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (onConnectionStart) onConnectionStart(e, node.id);
+        }}
+        title="Drag to connect"
+      >
+        <div className="w-2.5 h-2.5 bg-white rounded-full pointer-events-none" />
+      </div>
+    </div>
+  );
+};
+
+const AgentModal = ({ agent, onClose }) => {
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncSuccess, setSyncSuccess] = useState(false);
+  const [activeVariant, setActiveVariant] = useState('B');
+  const [isPlayingJourney, setIsPlayingJourney] = useState(false);
+
+  useEffect(() => {
+    setIsSyncing(false);
+    setSyncSuccess(false);
+    setActiveVariant('B');
+    setIsPlayingJourney(false);
+  }, [agent]);
+
+  if (!agent) return null;
+  const Icon = agent.icon;
+
+  const handleSync = () => {
+    setIsSyncing(true);
+    setTimeout(() => {
+      setIsSyncing(false);
+      setSyncSuccess(true);
+    }, 1500);
+  };
+
+  const renderAgentWorkspace = () => {
+    switch (agent.agentType) {
+      case 'brief_generator':
+        return (
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+              <p className="text-sm text-gray-500 mb-2">Human Prompt:</p>
+              <p className="text-gray-800 font-medium">"Draft a Q3 Back-to-School campaign for high-LTV college students."</p>
+            </div>
+            <div className="bg-amber-50 border border-amber-100 p-4 rounded-xl space-y-3 relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-amber-400"></div>
+              <div className="flex items-center gap-2 text-amber-700 font-bold mb-2">
+                <Bot size={18} /> Agent Generated Brief
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <p className="text-xs text-gray-500 uppercase">Est. Audience</p>
+                  <p className="text-xl font-bold text-gray-900">347,000</p>
+                </div>
+                <div className="bg-white p-3 rounded-lg shadow-sm">
+                  <p className="text-xs text-gray-500 uppercase">Proj. ROI</p>
+                  <p className="text-xl font-bold text-emerald-600">3.2x</p>
+                </div>
+              </div>
+              <div className="bg-white p-3 rounded-lg shadow-sm">
+                <p className="text-xs text-gray-500 uppercase mb-1">Recommended Channels</p>
+                <div className="flex gap-2">
+                  <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded text-xs font-semibold">Email</span>
+                  <span className="px-2 py-1 bg-pink-100 text-pink-700 rounded text-xs font-semibold">Instagram</span>
+                  <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded text-xs font-semibold">In-App</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'segment_builder':
+        return (
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100 flex items-center gap-3">
+              <MessageSquare className="text-gray-400" size={20} />
+              <input type="text" disabled value="Find users targeting back to school products" className="bg-transparent w-full text-sm font-medium text-gray-800 outline-none" />
+            </div>
+            <div className="bg-emerald-50 border border-emerald-100 p-4 rounded-xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-emerald-400"></div>
+              <div className="flex items-center gap-2 text-emerald-700 font-bold mb-4">
+                <Database size={18} /> Generated RTCDP Segment Logic
+              </div>
+              <div className="space-y-2 font-mono text-sm">
+                <div className="bg-white p-2 rounded border border-emerald-200 flex items-center gap-2">
+                  <span className="text-emerald-600 font-bold">INCLUDE</span> Event: Searched Backpacks
+                </div>
+                <div className="bg-white p-2 rounded border border-emerald-200 flex items-center gap-2">
+                  <span className="text-emerald-600 font-bold">AND</span> Timeframe &lt;= 14 days
+                </div>
+                <div className="bg-white p-2 rounded border border-emerald-200 flex items-center gap-2">
+                  <span className="text-emerald-600 font-bold">AND</span> Profile.Age BETWEEN 18 AND 24
+                </div>
+              </div>
+              <button
+                onClick={handleSync}
+                disabled={isSyncing || syncSuccess}
+                className={`mt-4 w-full py-2.5 rounded-lg font-semibold transition-all flex items-center justify-center gap-2 ${syncSuccess
+                  ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                  : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-md hover:shadow-emerald-500/20'
+                  }`}
+              >
+                {isSyncing ? (
+                  <><RefreshCw size={16} className="animate-spin" /> Syncing to Destinations...</>
+                ) : syncSuccess ? (
+                  <><Database size={16} /> Synced Successfully</>
+                ) : (
+                  <><Play size={16} /> Sync to RTCDP Destinations</>
+                )}
+              </button>
+            </div>
+          </div>
+        );
+      case 'journey_orchestrator':
+        return (
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl min-h-96 max-h-[500px] overflow-y-auto relative flex flex-col items-center justify-center">
+              <div className="absolute top-0 left-0 w-1 h-full bg-blue-400"></div>
+              <div className="flex items-center justify-between w-full absolute top-4 px-4">
+                <div className="flex items-center gap-2 text-blue-700 font-bold">
+                  <Share2 size={18} /> Generated Journey
+                </div>
+                <button
+                  onClick={() => setIsPlayingJourney(!isPlayingJourney)}
+                  className={`p-1.5 rounded-full ${isPlayingJourney ? 'bg-blue-200 text-blue-700' : 'bg-blue-100 text-blue-600 hover:bg-blue-200'}`}
+                >
+                  {isPlayingJourney ? <RefreshCw size={16} className="animate-spin" /> : <Play size={16} />}
+                </button>
+              </div>
+
+              <div className="flex flex-col items-center gap-4 mt-8">
+                <div className={`px-4 py-2 rounded-full border-2 text-sm font-bold shadow-sm transition-colors duration-500 ${isPlayingJourney ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-blue-300'}`}>Trigger: Segment Qualification</div>
+                <div className={`w-0.5 h-4 transition-colors duration-500 ${isPlayingJourney ? 'bg-blue-600' : 'bg-blue-300'}`}></div>
+                <div className="bg-gray-100 px-3 py-1 rounded text-xs text-gray-500">Wait 1 Day</div>
+                <div className={`w-0.5 h-4 transition-colors duration-500 ${isPlayingJourney ? 'bg-blue-600' : 'bg-blue-300'}`}></div>
+                <div className={`px-4 py-2 rounded-lg border-2 text-sm font-bold shadow-sm flex items-center gap-2 transition-colors duration-500 delay-300 ${isPlayingJourney ? 'bg-amber-500 text-white border-amber-500' : 'bg-white border-amber-300'}`}>
+                  Condition: Opened Email 1?
+                </div>
+                <div className="flex gap-16 relative">
+                  <div className={`absolute -top-4 left-1/2 w-24 h-0.5 -translate-x-1/2 transition-colors duration-500 delay-500 ${isPlayingJourney ? 'bg-emerald-500' : 'bg-blue-300'}`}></div>
+                  <div className={`absolute -top-4 left-[calc(50%-3rem)] w-0.5 h-4 transition-colors duration-500 delay-500 ${isPlayingJourney ? 'bg-emerald-500' : 'bg-blue-300'}`}></div>
+                  <div className={`absolute -top-4 right-[calc(50%-3rem)] w-0.5 h-4 transition-colors duration-500 delay-500 ${isPlayingJourney ? 'bg-gray-400' : 'bg-blue-300'}`}></div>
+
+                  <div className={`px-3 py-2 rounded-lg border-2 text-xs font-bold shadow-sm mt-2 transition-colors duration-500 delay-700 ${isPlayingJourney ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white border-emerald-300'}`}>Send SMS Offer</div>
+                  <div className={`px-3 py-2 rounded-lg border-2 text-xs font-bold shadow-sm mt-2 transition-colors duration-500 delay-700 ${isPlayingJourney ? 'bg-gray-100 text-gray-400 border-gray-200' : 'bg-white border-gray-300'}`}>Send Email 2 (Reminder)</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'variant_generator':
+        return (
+          <div className="space-y-4">
+            <div className="bg-purple-50 border border-purple-100 p-4 rounded-xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-purple-400"></div>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2 text-purple-700 font-bold">
+                  <LayoutTemplate size={18} /> Generated Variations (Adobe Target)
+                </div>
+                <div className="flex bg-white rounded-lg border border-purple-200 overflow-hidden text-xs font-bold">
+                  <button onClick={() => setActiveVariant('A')} className={`px-3 py-1.5 ${activeVariant === 'A' ? 'bg-purple-100 text-purple-700' : 'text-gray-500 hover:bg-gray-50'}`}>Variant A</button>
+                  <button onClick={() => setActiveVariant('B')} className={`px-3 py-1.5 ${activeVariant === 'B' ? 'bg-purple-600 text-white' : 'text-gray-500 hover:bg-gray-50'}`}>Variant B</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className={`bg-white rounded-lg border-2 overflow-hidden transition-all duration-300 ${activeVariant === 'A' ? 'border-purple-400 shadow-md scale-105' : 'border-gray-200 opacity-60'}`}>
+                  <div className="h-40 bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center overflow-hidden">
+                    <img src="https://images.pexels.com/photos/415886/pexels-photo-415886.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Student" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                  </div>
+                  <div className="p-3">
+                    <p className="text-xs font-bold text-gray-500 mb-1">Variant A (Control)</p>
+                    <p className="text-sm font-semibold">"Ready for School?"</p>
+                  </div>
+                </div>
+                <div className={`bg-white rounded-lg border-2 overflow-hidden transition-all duration-300 relative ${activeVariant === 'B' ? 'border-purple-400 shadow-md scale-105' : 'border-gray-200 opacity-60'}`}>
+                  <div className="absolute top-1 right-1 bg-purple-500 text-white text-[10px] px-1.5 py-0.5 rounded font-bold">Predicted Winner</div>
+                  <div className="h-40 bg-gradient-to-br from-purple-100 to-purple-200 flex items-center justify-center overflow-hidden">
+                    <img src="https://images.pexels.com/photos/788946/pexels-photo-788946.jpeg?auto=compress&cs=tinysrgb&w=400" alt="Tech" className="w-full h-full object-cover" onError={(e) => { e.target.style.display = 'none' }} />
+                  </div>
+                  <div className="p-3">
+                    <p className="text-xs font-bold text-purple-600 mb-1">Variant B (Tech Segment)</p>
+                    <p className="text-sm font-semibold">"Upgrade Your Gear for Fall"</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'anomaly_detector':
+        return (
+          <div className="space-y-4">
+            <div className="bg-rose-50 border border-rose-100 p-4 rounded-xl relative overflow-hidden">
+              <div className="absolute top-0 left-0 w-1 h-full bg-rose-400"></div>
+              <div className="flex items-center gap-2 text-rose-700 font-bold mb-4">
+                <AlertCircle size={18} /> Anomaly Detected
+              </div>
+
+              <div className="flex gap-4">
+                <div className="w-1/3 flex flex-col justify-end h-32 gap-2 border-b border-l border-rose-200 p-2">
+                  <div className="flex items-end gap-1 h-full">
+                    <div className="w-full bg-rose-200 h-[80%] rounded-t"></div>
+                    <div className="w-full bg-rose-200 h-[85%] rounded-t"></div>
+                    <div className="w-full bg-rose-200 h-[82%] rounded-t"></div>
+                    <div className="w-full bg-rose-500 h-[40%] rounded-t relative">
+                      <div className="absolute -top-2 -right-1 w-3 h-3 bg-rose-600 rounded-full animate-ping"></div>
+                      <div className="absolute -top-2 -right-1 w-3 h-3 bg-rose-600 rounded-full"></div>
+                    </div>
+                  </div>
+                </div>
+                <div className="w-2/3 space-y-3">
+                  <div className="bg-white p-3 rounded-lg shadow-sm border border-rose-100">
+                    <p className="text-sm text-gray-800"><span className="font-bold text-rose-600">Insight:</span> 24% drop in CTR detected on iOS push notifications.</p>
+                  </div>
+                  <div className="bg-white p-3 rounded-lg shadow-sm border border-rose-100">
+                    <p className="text-sm text-gray-800"><span className="font-bold text-rose-600">Root Cause:</span> Recent iOS update blocks rich media by default.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4" onClick={onClose}>
+      <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"></div>
+      <div
+        className="relative w-full max-w-2xl bg-white/90 backdrop-blur-xl border border-white/50 rounded-3xl shadow-2xl overflow-hidden flex flex-col"
+        onClick={e => e.stopPropagation()}
+        onPointerDown={e => e.stopPropagation()}
+      >
+        <div className={`p-6 border-b border-gray-100 flex items-start justify-between ${agent.bg}`}>
+          <div className="flex items-center gap-4">
+            <div className={`w-16 h-16 rounded-2xl bg-white shadow-sm flex items-center justify-center ${agent.color}`}>
+              <Icon size={32} />
+            </div>
+            <div>
+              <h2 className="text-2xl font-black text-gray-900 tracking-tight">{agent.name}</h2>
+              <p className="text-sm font-medium text-gray-600 mt-1">{agent.description}</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 bg-white/50 hover:bg-white rounded-full transition-colors text-gray-500">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-6 flex-1 overflow-y-auto">
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Replaces Human Effort</p>
+              <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                <Users size={16} className="text-gray-400" /> {agent.replaces}
+              </p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
+              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1">Adobe Integration</p>
+              <p className="text-sm font-semibold text-gray-800 flex items-center gap-2">
+                <Database size={16} className="text-gray-400" /> {agent.adobeTool}
+              </p>
+            </div>
+          </div>
+
+          <div className="mb-2">
+            <h3 className="text-sm font-bold text-gray-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+              <Bot size={18} className={agent.color} /> Agent Workspace
+            </h3>
+            {renderAgentWorkspace()}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const EditNodePanel = ({ node, onSave, onClose }) => {
+  const [formData, setFormData] = useState({
+    title: node.title,
+    adobeTool: node.adobeTool,
+    agentPush: node.agentPush || '',
+    humanAction: node.humanAction || ''
+  });
+
+  useEffect(() => {
+    setFormData({
+      title: node.title,
+      adobeTool: node.adobeTool,
+      agentPush: node.agentPush || '',
+      humanAction: node.humanAction || ''
+    });
+  }, [node]);
+
+  const Icon = node.icon;
+
+  return (
+    <div className="absolute top-0 right-0 h-full w-[400px] bg-white shadow-[[-10px_0_40px_rgba(0,0,0,0.1)]] border-l border-gray-200 z-[100] flex flex-col no-pan transition-transform">
+      <div className="p-6 border-b border-gray-100 flex items-start justify-between bg-white pt-8">
+        <div className="flex gap-4 items-center">
+          <div className={`p-3 rounded-xl bg-[#eef2ff] text-indigo-600 shadow-sm border border-indigo-100`}>
+            <Icon size={24} />
+          </div>
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1 shadow-sm">Currently Editing</p>
+            <h2 className="text-xl font-black text-gray-900 leading-tight tracking-tight">{node.title}</h2>
+          </div>
+        </div>
+        <button onClick={onClose} className="p-2 mb-2 bg-white hover:bg-gray-50 rounded-full transition-colors text-gray-400 shadow-sm border border-gray-100">
+          <X size={18} />
+        </button>
+      </div>
+      <div className="p-6 flex-1 overflow-y-auto space-y-6 bg-white">
+        <div>
+          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Node Title</label>
+          <input type="text" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} className="w-full px-4 py-3 bg-[#fafafa] border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 font-semibold text-gray-900 text-sm shadow-sm" />
+        </div>
+        <div>
+          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2">Tool Integration / Platform</label>
+          <input type="text" value={formData.adobeTool} onChange={e => setFormData({ ...formData, adobeTool: e.target.value })} className="w-full px-4 py-3 bg-[#fafafa] border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 font-semibold text-indigo-600 uppercase text-xs shadow-sm" />
+        </div>
+        <div>
+          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-2"><Bot size={14} className="text-indigo-600" /> Agent Action / Co-Pilot</label>
+          <textarea rows={4} value={formData.agentPush} onChange={e => setFormData({ ...formData, agentPush: e.target.value })} className="w-full px-4 py-3 bg-[#f8fafc] border border-indigo-50 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 text-sm text-gray-600 leading-relaxed resize-none shadow-sm" />
+        </div>
+        <div>
+          <label className="block text-[11px] font-bold text-gray-700 uppercase tracking-wider mb-2 flex items-center gap-2"><Users size={14} className="text-gray-500" /> Human Action</label>
+          <textarea rows={4} value={formData.humanAction} onChange={e => setFormData({ ...formData, humanAction: e.target.value })} className="w-full px-4 py-3 bg-[#fafafa] border border-gray-100 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-400 focus:border-gray-400 text-sm text-gray-600 leading-relaxed resize-none shadow-sm" />
+        </div>
+      </div>
+      <div className="p-6 bg-white pb-8">
+        <button onClick={() => onSave(node.id, formData)} className="w-full py-3.5 bg-[#4f46e5] hover:bg-[#4338ca] text-white rounded-xl shadow-md hover:shadow-indigo-500/20 font-bold flex items-center justify-center gap-2 transition-all hover:-translate-y-0.5">
+          <Save size={18} /> Update Content
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const MenuButton = ({ mode, label, current, set }) => (
+  <button
+    onClick={() => set(mode)}
+    className={`w-full text-left px-6 py-4 text-sm font-semibold transition-colors border-l-4 ${current === mode
+      ? 'bg-indigo-50 text-indigo-700 border-indigo-600'
+      : 'border-transparent text-gray-600 hover:bg-gray-50 hover:text-gray-900'
+      }`}
+  >
+    {label}
+  </button>
+);
+
+const Documentation = () => (
+  <div className="p-12 max-w-4xl mx-auto h-full overflow-y-auto no-pan">
+    <div className="bg-white rounded-3xl shadow-xl border border-gray-200 p-10">
+      <h2 className="text-3xl font-black text-gray-900 mb-6">Architecture & Dependencies</h2>
+
+      <div className="space-y-8">
+        <section>
+          <h3 className="text-xl font-bold text-indigo-900 mb-4 flex items-center gap-2"><Layers size={24} /> Adobe Stack Integration</h3>
+          <div className="space-y-4">
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+              <h4 className="font-bold text-gray-900 mb-2">Adobe Workfront</h4>
+              <p className="text-gray-600 text-sm">Serves as the system of record for strategy and planning. The Use Case Agent integrates here to draft briefs and project ROI.</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+              <h4 className="font-bold text-gray-900 mb-2">Adobe Real-Time CDP (RTCDP)</h4>
+              <p className="text-gray-600 text-sm">Central hub for audience data. The Segmentation Agent builds cohorts and suppression logic directly into RTCDP.</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+              <h4 className="font-bold text-gray-900 mb-2">Adobe Campaign</h4>
+              <p className="text-gray-600 text-sm">Execution engine for omnichannel journeys. The Campaign Agent orchestrates flows and triggers based on RTCDP segments.</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+              <h4 className="font-bold text-gray-900 mb-2">Adobe Target & GenStudio</h4>
+              <p className="text-gray-600 text-sm">Powers real-time personalization and content generation. The Personalization Agent creates and tests variants here.</p>
+            </div>
+            <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
+              <h4 className="font-bold text-gray-900 mb-2">Customer Journey Analytics (CJA)</h4>
+              <p className="text-gray-600 text-sm">Provides cross-channel insights. The Insights Agent monitors CJA for anomalies and attribution data.</p>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>
+  </div>
+);
+
+const McpServerDocs = () => (
+  <div className="p-12 max-w-4xl mx-auto h-full overflow-y-auto no-pan">
+    <div className="bg-white rounded-3xl shadow-xl border border-gray-200 p-10">
+      <div className="flex items-center gap-4 mb-6">
+        <div className="p-4 bg-rose-100 text-rose-600 rounded-2xl">
+          <Database size={32} />
+        </div>
+        <div>
+          <h2 className="text-3xl font-black text-gray-900">Master MCP Server</h2>
+          <p className="text-gray-500 font-medium">Model Context Protocol Orchestrator</p>
+        </div>
+      </div>
+
+      <div className="space-y-8 text-gray-700 leading-relaxed">
+        <section>
+          <div className="bg-gray-50 p-6 rounded-2xl border border-gray-100 shadow-sm">
+            <h3 className="text-xl font-bold text-indigo-900 mb-3 flex items-center gap-2"><Zap size={20} /> Intelligent Routing Hub</h3>
+            <p className="text-sm border-b border-gray-200 pb-4 mb-4">
+              The overarching Master MCP Server acts as the central nervous system connecting LLMs to the diverse, specialized internal tools and data sources inside the enterprise ecosystem. Rather than an LLM needing direct integration with every disparate API, the MCP Server manages secure, standardized message passing.
+            </p>
+            <div className="grid grid-cols-2 gap-4 mt-4">
+              <div className="bg-white p-4 rounded-xl border border-indigo-50 shadow-sm">
+                <h4 className="font-bold text-sm text-gray-900 mb-1 flex items-center gap-2"><Sparkles size={16} className="text-indigo-500" /> API Aggregation</h4>
+                <p className="text-xs text-gray-500">Combines dozens of internal tools (Jira, Workfront, Adobe suite) into standard context window schema requests.</p>
+              </div>
+              <div className="bg-white p-4 rounded-xl border border-indigo-50 shadow-sm">
+                <h4 className="font-bold text-sm text-gray-900 mb-1 flex items-center gap-2"><Lock size={16} className="text-indigo-500" /> RBAC Security</h4>
+                <p className="text-xs text-gray-500">Automatically applies role-based access control based on the human user authorizing the autonomous agent run.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section>
+          <h3 className="text-xl font-bold text-indigo-900 mb-4 flex items-center gap-2"><Layers size={24} /> Supported Sub-Agents</h3>
+          <div className="space-y-3">
+            <div className="flex items-center gap-4 p-4 border border-rose-100 bg-rose-50/30 rounded-xl transition-all hover:bg-white hover:shadow-md cursor-default">
+              <Target className="text-rose-500 shrink-0" size={24} />
+              <div>
+                <p className="font-bold text-gray-900">Audience Strategy MCP</p>
+                <p className="text-sm text-gray-500">Pulls demographics directly from AEP/RTCDP via secure queries.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 p-4 border border-rose-100 bg-rose-50/30 rounded-xl transition-all hover:bg-white hover:shadow-md cursor-default">
+              <LayoutTemplate className="text-rose-500 shrink-0" size={24} />
+              <div>
+                <p className="font-bold text-gray-900">Content GenStudio MCP</p>
+                <p className="text-sm text-gray-500">Routes creative prompts directly into Adobe Firefly API services.</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-4 p-4 border border-rose-100 bg-rose-50/30 rounded-xl transition-all hover:bg-white hover:shadow-md cursor-default">
+              <BarChart3 className="text-rose-500 shrink-0" size={24} />
+              <div>
+                <p className="font-bold text-gray-900">Analytics CJA MCP</p>
+                <p className="text-sm text-gray-500">Retrieves attribution tables and anomaly reports for optimization feedback.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+);
+
+const AgentsGrid = ({ onAgentClick }) => (
+  <div className="p-12 max-w-6xl mx-auto h-full overflow-y-auto no-pan">
+    <h2 className="text-3xl font-black text-gray-900 mb-8">Agents</h2>
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      {AGENTS.map(agent => {
+        const Icon = agent.icon;
+        return (
+          <div
+            key={agent.id}
+            onClick={() => onAgentClick(agent)}
+            className="bg-white rounded-3xl shadow-lg border border-gray-100 p-6 cursor-pointer hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group"
+          >
+            <div className={`w-16 h-16 rounded-2xl ${agent.bg} border ${agent.border} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
+              <Icon className={agent.color} size={32} />
+            </div>
+            <h3 className="text-xl font-bold text-gray-900 mb-2">{agent.name}</h3>
+            <p className="text-sm text-gray-600 mb-4 h-16">{agent.description}</p>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 text-xs font-semibold text-gray-500">
+                <Users size={14} /> Replaces: {agent.replaces}
+              </div>
+              <div className="flex items-center gap-2 text-xs font-semibold text-gray-500">
+                <Database size={14} /> Tool: {agent.adobeTool}
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  </div>
+);
+
+export default function App() {
+  const [viewMode, setViewMode] = useState('combined-agentic');
+  const [isLegacy, setIsLegacy] = useState(false);
+  const [approvedNodes, setApprovedNodes] = useState(new Set());
+  const [recentApprovals, setRecentApprovals] = useState([]);
+  const [selectedAgent, setSelectedAgent] = useState(null);
+  const [zoom, setZoom] = useState(1);
+
+  const [localNodes, setLocalNodes] = useState(NODES);
+  const [editingNodeId, setEditingNodeId] = useState(null);
+  const [openDropdownId, setOpenDropdownId] = useState(null);
+
+  // Drag and Drop State
+  const [nodePositions, setNodePositions] = useState({});
+  const [draggingNode, setDraggingNode] = useState(null);
+  const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+
+  // Custom Connections State
+  const [localConnections, setLocalConnections] = useState(CONNECTIONS);
+  const [drawingConnection, setDrawingConnection] = useState(null);
+  const [selectedConnectionForDelete, setSelectedConnectionForDelete] = useState(null);
+
+  const handleRemoveConnection = useCallback((sourceId, targetId) => {
+    setLocalConnections(prev => prev.filter(c => !(c.source === sourceId && c.target === targetId)));
+    setSelectedConnectionForDelete(null);
+  }, []);
+
+  const handleConnectionClick = useCallback((e, sourceId, targetId) => {
+    const canvasContainer = document.getElementById('interactive-canvas');
+    if (!canvasContainer) return;
+    const rect = canvasContainer.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
+
+    setSelectedConnectionForDelete({ sourceId, targetId, x, y });
+  }, [zoom]);
+
+  // Initialize node positions once when component mounts
+  useEffect(() => {
+    const initialPositions = {};
+    localNodes.forEach(n => {
+      initialPositions[n.id] = { x: n.x, y: n.y };
+    });
+    setNodePositions(initialPositions);
+  }, [localNodes]);
+
+  useEffect(() => {
+    if (['strategy', 'creative', 'ops', 'combined-legacy'].includes(viewMode)) {
+      setIsLegacy(true);
+    } else if (viewMode === 'combined-agentic') {
+      setIsLegacy(false);
+    }
+  }, [viewMode]);
+
+  const visibleNodes = useMemo(() => {
+    let nodes = [];
+    switch (viewMode) {
+      case 'strategy': nodes = localNodes.filter(n => n.lane === 'strategy'); break;
+      case 'creative': nodes = localNodes.filter(n => n.lane === 'design'); break;
+      case 'ops': nodes = localNodes.filter(n => n.lane === 'ops'); break;
+      case 'combined-legacy': nodes = localNodes; break;
+      case 'combined-agentic': nodes = localNodes; break;
+      default: nodes = []; break;
+    }
+
+    if (nodes.length === 0) return [];
+
+    const minX = Math.min(...localNodes.map(n => nodePositions[n.id]?.x ?? n.x));
+    const minY = Math.min(...localNodes.map(n => nodePositions[n.id]?.y ?? n.y));
+
+    const offsetX = minX - 50;
+    const offsetY = minY - 50;
+
+    return nodes.map(n => ({
+      ...n,
+      x: (nodePositions[n.id]?.x ?? n.x) - offsetX,
+      y: (nodePositions[n.id]?.y ?? n.y) - offsetY,
+      originalX: nodePositions[n.id]?.x ?? n.x,
+      originalY: nodePositions[n.id]?.y ?? n.y
+    }));
+  }, [viewMode, nodePositions]);
+
+  const visibleConnections = useMemo(() => {
+    const nodeIds = new Set(visibleNodes.map(n => n.id));
+    return localConnections.filter(c => nodeIds.has(c.source) && nodeIds.has(c.target));
+  }, [visibleNodes, localConnections]);
+
+  const canvasWidth = visibleNodes.length > 0 ? Math.max(...visibleNodes.map(n => n.x)) + 450 : 1000;
+  const canvasHeight = visibleNodes.length > 0 ? Math.max(...visibleNodes.map(n => n.y)) + 400 : 1000;
+
+  const handleApprove = (id) => {
+    setApprovedNodes(prev => new Set(prev).add(id));
+    setRecentApprovals(prev => [...prev, id]);
+    setTimeout(() => {
+      setRecentApprovals(prev => prev.filter(nodeId => nodeId !== id));
+    }, 2000);
+  };
+
+  const resetFlow = () => {
+    setApprovedNodes(new Set());
+    setRecentApprovals([]);
+  };
+
+  const getProcessTime = () => {
+    if (isLegacy) {
+      switch (viewMode) {
+        case 'strategy': return '3 Weeks';
+        case 'creative': return '4 Weeks';
+        case 'ops': return '2 Weeks';
+        default: return '9 Weeks';
+      }
+    } else {
+      switch (viewMode) {
+        case 'strategy': return '2 Days';
+        case 'creative': return '3 Days';
+        case 'ops': return '1 Day';
+        default: return '1 Week';
+      }
+    }
+  };
+
+  const handleMouseDown = useCallback((e, nodeId) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    // Find the current rendered position of the node (which includes offset adjustments)
+    const node = visibleNodes.find(n => n.id === nodeId);
+    if (!node) return;
+
+    // Calculate the offset between the mouse pointer and the node's top-left corner
+    const rect = e.currentTarget.parentElement.getBoundingClientRect();
+    const offsetX = (e.clientX - rect.left) / zoom;
+    const offsetY = (e.clientY - rect.top) / zoom;
+
+    setDragOffset({ x: offsetX, y: offsetY });
+    setDraggingNode(nodeId);
+  }, [visibleNodes, zoom]);
+
+  const handleMouseMove = useCallback((e) => {
+    const canvasContainer = document.getElementById('interactive-canvas');
+    if (!canvasContainer) return;
+    const rect = canvasContainer.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
+
+    if (drawingConnection) {
+      setDrawingConnection(prev => prev ? { ...prev, currentX: x, currentY: y } : null);
+      return;
+    }
+
+    if (!draggingNode) return;
+
+    // Determine the new global coordinates for the node
+    const minX = Math.min(...localNodes.map(n => nodePositions[n.id]?.x ?? n.x));
+    const minY = Math.min(...localNodes.map(n => nodePositions[n.id]?.y ?? n.y));
+    const offsetX = minX - 50;
+    const offsetY = minY - 50;
+
+    setNodePositions(prev => ({
+      ...prev,
+      [draggingNode]: {
+        x: x - dragOffset.x + offsetX,
+        y: y - dragOffset.y + offsetY
+      }
+    }));
+  }, [draggingNode, dragOffset, zoom, nodePositions, drawingConnection]);
+
+  const handleMouseUp = useCallback(() => {
+    setDraggingNode(null);
+    if (drawingConnection) {
+      setDrawingConnection(null);
+    }
+  }, [drawingConnection]);
+
+  const handleConnectionStart = useCallback((e, nodeId) => {
+    const canvasContainer = document.getElementById('interactive-canvas');
+    if (!canvasContainer) return;
+    const rect = canvasContainer.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoom;
+    const y = (e.clientY - rect.top) / zoom;
+
+    setDrawingConnection({ sourceId: nodeId, currentX: x, currentY: y });
+  }, [zoom]);
+
+  const handleConnectionDrop = useCallback((targetNodeId) => {
+    if (drawingConnection && drawingConnection.sourceId !== targetNodeId) {
+      setLocalConnections(prev => {
+        const exists = prev.some(c => c.source === drawingConnection.sourceId && c.target === targetNodeId);
+        if (exists) return prev;
+        return [...prev, {
+          id: `${drawingConnection.sourceId}-${targetNodeId}`,
+          source: drawingConnection.sourceId,
+          target: targetNodeId
+        }];
+      });
+    }
+    setDrawingConnection(null);
+  }, [drawingConnection]);
+
+  // Dismiss context menu on canvas click
+  const handleCanvasClick = useCallback(() => {
+    if (selectedConnectionForDelete) {
+      setSelectedConnectionForDelete(null);
+    }
+    if (openDropdownId) {
+      setOpenDropdownId(null);
+    }
+  }, [selectedConnectionForDelete, openDropdownId]);
+
+  useEffect(() => {
+    if (draggingNode) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    }
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [draggingNode, handleMouseMove, handleMouseUp]);
+
+  return (
+    <div className="flex h-screen w-screen overflow-hidden bg-slate-50">
+      {/* Sidebar Menu */}
+      <div className="w-72 bg-white border-r border-gray-200 shadow-lg z-50 flex flex-col shrink-0">
+        <div className="p-6 border-b border-gray-100">
+          <h1 className="text-xl font-black text-gray-900 tracking-tight leading-tight">Agentic marketing<br /><span className="text-indigo-600">operating model</span></h1>
+        </div>
+        <div className="flex-1 overflow-y-auto py-4">
+          <MenuButton mode="strategy" label="1. Strategy" current={viewMode} set={setViewMode} />
+          <MenuButton mode="creative" label="2. Creative" current={viewMode} set={setViewMode} />
+          <MenuButton mode="ops" label="3. Operations" current={viewMode} set={setViewMode} />
+          <MenuButton mode="combined-legacy" label="4. Overall Workflow (Current)" current={viewMode} set={setViewMode} />
+          <MenuButton mode="combined-agentic" label="5. Overall Workflow (Future)" current={viewMode} set={setViewMode} />
+          <MenuButton mode="mcps" label="6. Master MCP Server" current={viewMode} set={setViewMode} />
+          <MenuButton mode="agents" label="7. Agents" current={viewMode} set={setViewMode} />
+          <MenuButton mode="documentation" label="8. Documentation" current={viewMode} set={setViewMode} />
+        </div>
+      </div>
+
+      {/* Main Content Area */}
+      <div
+        className="flex-1 relative overflow-auto bg-dot-pattern"
+        style={{
+          backgroundSize: `${32 * zoom}px ${32 * zoom}px`
+        }}
+      >
+        {viewMode === 'documentation' ? (
+          <Documentation />
+        ) : viewMode === 'mcps' ? (
+          <McpServerDocs />
+        ) : viewMode === 'agents' ? (
+          <AgentsGrid onAgentClick={setSelectedAgent} />
+        ) : (
+          <>
+            <div className="fixed top-6 right-6 z-50 flex items-center gap-6 p-3 pr-4 rounded-2xl shadow-xl bg-white/90 backdrop-blur-md border border-white/20">
+              <div className="flex flex-col items-end border-r border-gray-200 pr-6">
+                <span className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mb-0.5">Process Time</span>
+                <span className={`text-2xl font-black tracking-tight transition-colors duration-500 ${isLegacy ? 'text-red-500' : 'text-emerald-500'}`}>
+                  {getProcessTime()}
+                </span>
+              </div>
+
+              {viewMode === 'combined-agentic' && (
+                <div className="flex items-center gap-2 bg-gray-100/80 p-1.5 rounded-xl">
+                  <button
+                    onClick={() => setIsLegacy(true)}
+                    className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 ${isLegacy ? 'bg-white shadow-md text-gray-900 scale-105' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Legacy Mode
+                  </button>
+                  <button
+                    onClick={() => setIsLegacy(false)}
+                    className={`px-5 py-2.5 rounded-lg text-sm font-bold transition-all duration-300 ${!isLegacy ? 'bg-indigo-600 shadow-lg shadow-indigo-500/30 text-white scale-105' : 'text-gray-500 hover:text-gray-700'}`}
+                  >
+                    Agentic Mode
+                  </button>
+                </div>
+              )}
+
+              <button
+                onClick={resetFlow}
+                className="p-2.5 text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-xl transition-colors"
+                title="Reset Flow"
+              >
+                <RefreshCw size={20} />
+              </button>
+            </div>
+
+            <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-2 p-2 rounded-xl shadow-xl bg-white/90 backdrop-blur-md border border-white/20">
+              <button
+                onClick={() => setZoom(z => Math.min(z + 0.1, 2))}
+                className="p-2 bg-white rounded-lg shadow-sm hover:bg-gray-50 text-gray-700 transition-colors"
+                title="Zoom In"
+              >
+                <ZoomIn size={20} />
+              </button>
+              <div className="text-xs font-bold text-center text-gray-500 py-1">
+                {Math.round(zoom * 100)}%
+              </div>
+              <button
+                onClick={() => setZoom(z => Math.max(z - 0.1, 0.3))}
+                className="p-2 bg-white rounded-lg shadow-sm hover:bg-gray-50 text-gray-700 transition-colors"
+                title="Zoom Out"
+              >
+                <ZoomOut size={20} />
+              </button>
+            </div>
+
+            <div className="fixed bottom-6 left-[312px] z-50 flex items-center gap-4 px-5 py-3 rounded-2xl shadow-xl bg-white/95 backdrop-blur-md border border-white/20">
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest border-r border-gray-200 pr-4">Node Types</span>
+              <div className="flex items-center gap-6">
+                <div className="flex items-center gap-2">
+                  <div className="w-3 h-3 rounded-full bg-[#ffe4e6] border border-rose-200"></div>
+                  <span className="text-xs font-bold text-gray-600">MCP Platform</span>
+                </div>
+              </div>
+            </div>
+
+            <div style={{ width: `${canvasWidth * zoom}px`, height: `${canvasHeight * zoom}px` }}>
+              <div
+                id="interactive-canvas"
+                className="relative origin-top-left"
+                style={{
+                  transform: `scale(${zoom})`,
+                  width: `${canvasWidth}px`,
+                  height: `${canvasHeight}px`,
+                  minHeight: '100%',
+                  minWidth: '100%'
+                }}
+                onClick={handleCanvasClick}
+              >
+                <svg
+                  className="absolute top-0 left-0 pointer-events-none -z-10 overflow-visible"
+                  style={{ width: '100%', height: '100%' }}
+                >
+                  {visibleConnections.map((conn, i) => {
+                    const sourceNode = visibleNodes.find(n => n.id === conn.source);
+                    const targetNode = visibleNodes.find(n => n.id === conn.target);
+                    if (!sourceNode || !targetNode) return null;
+
+                    return (
+                      <Connection
+                        key={i}
+                        sourceNode={sourceNode}
+                        targetNode={targetNode}
+                        isLegacy={isLegacy}
+                        isRecentlyApproved={recentApprovals.includes(sourceNode.id)}
+                        onClickConnection={handleConnectionClick}
+                      />
+                    );
+                  })}
+
+                  {drawingConnection && (
+                    <Connection
+                      key="drawing-active"
+                      sourceNode={visibleNodes.find(n => n.id === drawingConnection.sourceId)}
+                      targetNode={{ x: drawingConnection.currentX, y: drawingConnection.currentY }}
+                      isLegacy={isLegacy}
+                      isRecentlyApproved={false}
+                      isDrawing={true}
+                    />
+                  )}
+                </svg>
+
+                {visibleNodes.map(node => {
+                  const canApprove = node.dependsOn ? node.dependsOn.every(dep => approvedNodes.has(dep)) : true;
+                  return (
+                    <NodeCard
+                      key={node.id}
+                      node={node}
+                      isLegacy={isLegacy}
+                      isApproved={approvedNodes.has(node.id)}
+                      canApprove={canApprove}
+                      onApprove={handleApprove}
+                      onNavigate={setViewMode}
+                      viewMode={viewMode}
+                      onMouseDown={handleMouseDown}
+                      isDragging={draggingNode === node.id}
+                      onConnectionStart={handleConnectionStart}
+                      onConnectionDrop={handleConnectionDrop}
+                      onEditNode={setEditingNodeId}
+                      openDropdownId={openDropdownId}
+                      setOpenDropdownId={setOpenDropdownId}
+                      isEditing={editingNodeId === node.id}
+                    />
+                  );
+                })}
+
+                {/* Connection Action Overlay */}
+                {selectedConnectionForDelete && (
+                  <div
+                    className="absolute z-[60] bg-white rounded-xl shadow-2xl border border-gray-200 p-2 flex gap-2"
+                    style={{
+                      left: selectedConnectionForDelete.x,
+                      top: selectedConnectionForDelete.y,
+                      transform: 'translate(-50%, -120%)' // position exactly above the click point
+                    }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      onClick={() => setSelectedConnectionForDelete(null)}
+                      className="px-4 py-2 text-sm font-bold text-gray-600 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      onClick={() => handleRemoveConnection(selectedConnectionForDelete.sourceId, selectedConnectionForDelete.targetId)}
+                      className="px-4 py-2 text-sm font-bold text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors"
+                    >
+                      Delete Line
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+
+      <AgentModal agent={selectedAgent} onClose={() => setSelectedAgent(null)} />
+
+      {editingNodeId && (
+        <EditNodePanel
+          node={localNodes.find(n => n.id === editingNodeId)}
+          onClose={() => setEditingNodeId(null)}
+          onSave={(id, data) => {
+            setLocalNodes(prev => prev.map(n => n.id === id ? { ...n, ...data } : n));
+            setEditingNodeId(null);
+          }}
+        />
+      )}
+    </div>
+  );
+}
